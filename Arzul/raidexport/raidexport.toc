@@ -1,0 +1,6 @@
+## Interface: 100107
+## Title: WoWRaidExport
+## Notes: Exportiert Raid-Events und Teilnehmer in JSON-Datei
+## SavedVariables: WoWRaidData
+
+wowraidexport.lua
