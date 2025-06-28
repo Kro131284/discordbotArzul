@@ -6,7 +6,7 @@ import os
 import time
 
 load_dotenv()
-LochID = os.getenv("Loch_ID")
+LochID = os.getenv("Systemmeldung_ID")
 
 COOLDOWN_TIME = 1800  # 30 Minuten in Sekunden
 

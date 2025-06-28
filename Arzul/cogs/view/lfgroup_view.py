@@ -13,8 +13,15 @@ class GameDropdown(Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        # Die Auswahl des Spiels wird nun im Controller verarbeitet.
-        pass
+        game_name = self.values[0]
+        await interaction.response.defer(ephemeral=True)
+        
+        # LFG Controller holen
+        controller = interaction.client.get_cog("LFGController")
+        if controller:
+            await controller.show_group_size(interaction, game_name)
+        else:
+            await interaction.followup.send("Fehler: LFG-System nicht verfügbar.", ephemeral=True)
 
 
 class GroupSizeDropdown(Select):
@@ -23,12 +30,20 @@ class GroupSizeDropdown(Select):
         self.bot = bot
         self.game_name = game_name
         super().__init__(
-            placeholder="Wähle die Gruppengröße aus", options=[], custom_id="group_size_dropdown"
+            placeholder="Wähle die Gruppengröße aus", 
+            options=[], 
+            custom_id="group_size_dropdown"
         )
 
     async def callback(self, interaction: Interaction):
-        pass
-
+        try:
+            group_size = int(self.values[0].split()[0])  # Extrahiere die Zahl aus "X Spieler"
+            modal = GroupDescriptionModal(interaction, group_size, self.game_name)
+            await interaction.response.send_modal(modal)
+        except ValueError as e:
+            await interaction.response.send_message(f"Fehler bei der Verarbeitung der Gruppengröße: {e}", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Ein unerwarteter Fehler ist aufgetreten: {e}", ephemeral=True)
 # Button-Klassen
 class JoinGroupButton(Button):
     def __init__(self, channel, bot):
@@ -188,26 +203,55 @@ class JoinGroupView(View):
         await group_data['creator'].move_to(voice_channel)
 
 class GroupDescriptionModal(Modal):
-    group_name = TextInput(
-        label="Gruppenname",
-        placeholder="Gib hier den Namen der Gruppe ein",
-        max_length=50,
-        required=True
-    )
-
     def __init__(self, interaction, group_size, game_name):
-        super().__init__(title="")  # Titel wird dynamisch gesetzt
+        super().__init__(title=f"[* {game_name} *] Neue Gruppe")
         self.interaction = interaction
         self.group_size = group_size
         self.game_name = game_name
-        self.title = f"[* {game_name} *] Neue Gruppe"
+        
+        self.group_name = TextInput(
+            label="Gruppenname",
+            placeholder="Gib hier den Namen der Gruppe ein",
+            max_length=50,
+            required=True
+        )
+        self.start_date = TextInput(
+            label="Startdatum (TT.MM.JJJJ)",
+            placeholder="z.B. 29.06.2025",
+            max_length=10,
+            required=True
+        )
+        self.start_time = TextInput(
+            label="Startzeit (HH:MM)",
+            placeholder="z.B. 20:00",
+            max_length=5,
+            required=True
+        )
+        self.add_item(self.group_name)
+        self.add_item(self.start_date)
+        self.add_item(self.start_time)
 
     async def on_submit(self, interaction: discord.Interaction):
-        group_name = self.group_name.value
-        # Hier kannst du dann die Gruppe erstellen.
-        controller = interaction.client.get_cog("LFGCommand")
-        if controller:
-            await controller.create_group(interaction, group_name, self.game_name, self.group_size)
-        else:
-            await interaction.followup.send("Es ist ein Fehler aufgetreten. Die Gruppe konnte nicht erstellt werden.", ephemeral=True)
-
+        try:
+            group_name = self.group_name.value
+            start_date = self.start_date.value
+            start_time = self.start_time.value
+            controller = interaction.client.get_cog("LFGController")
+            if not controller:
+                await interaction.response.send_message("Fehler: LFG-System nicht verfügbar.", ephemeral=True)
+                return
+                
+            # Gruppe erstellen, jetzt mit Datum und Zeit
+            await controller.create_group(
+                interaction,
+                group_name,
+                self.game_name,
+                self.group_size,
+                start_date,
+                start_time
+            )
+        except Exception as e:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"Fehler beim Erstellen der Gruppe: {str(e)}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"Fehler beim Erstellen der Gruppe: {str(e)}", ephemeral=True)

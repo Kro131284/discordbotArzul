@@ -83,12 +83,13 @@ class LFGController(commands.Cog):
         modal = GroupDescriptionModal(interaction, group_size, game_name)
         await interaction.response.send_modal(modal)
 
-    async def create_group(self, interaction: discord.Interaction, group_name : str, game_name : str, group_size: int):
+    async def create_group(self, interaction: discord.Interaction, group_name : str, game_name : str, group_size: int, start_date: str, start_time: str):
         """Erstellt eine Gruppe und sendet eine Nachricht mit Buttons."""
         try:
             guild = interaction.guild
             member = interaction.user
-            channel_title = f"[* {game_name}*] {group_name}" #titel der Gruppe mit Spiel und Gruppennamen
+            # Channel-Titel mit Spielname und Gruppenname
+            channel_title = f"[* {game_name} *] {group_name}"
 
             # Kategorie für Gruppen prüfen/erstellen
             category = discord.utils.get(guild.categories, name=CATEGORY_NAME)
@@ -96,7 +97,7 @@ class LFGController(commands.Cog):
                 category = await guild.create_category(CATEGORY_NAME)
             
             # Temporären Textkanal erstellen
-            temp_channel = await guild.create_text_channel(name=game_name, category=category)
+            temp_channel = await guild.create_text_channel(name=channel_title, category=category)
 
             # Gruppendaten speichern
             self.bot.temp_channels[temp_channel.id] = {
@@ -106,13 +107,16 @@ class LFGController(commands.Cog):
                 "last_active": datetime.utcnow(),
                 "game_name": game_name,
                 "group_name": group_name,
-                "channel_title" : channel_title #channel_title gespeichert
+                "channel_title" : channel_title,
+                "start_date": start_date,
+                "start_time": start_time
             }
 
             # Embed erstellen
             embed = discord.Embed(
                 title=channel_title,
                 color=discord.Color.green(),
+                description=f"**Startdatum:** {start_date}\n**Startzeit:** {start_time}\n\nNoch keine Beschreibung."
             )
             embed.add_field(name="Teilnehmer", value="Noch keine Anmeldungen", inline=False)
             embed.set_footer(text="Drücke den Button, um beizutreten!")
