@@ -59,12 +59,11 @@ class LFGController(commands.Cog):
 
             # Dropdown für Gruppengrößen erstellen
             dropdown = GroupSizeDropdown(interaction, interaction.client, game_name)
-
             dropdown.options = [
                 discord.SelectOption(label=f"{size} Spieler", description=f"Größe für {game_name}", value=str(size))
                 for size in group_sizes
             ]
-            dropdown.callback = self.group_size_dropdown_callback  # Callback der Dropdown Liste zuweisen
+            # KEIN callback setzen! Die Callback-Logik ist in der View-Klasse
 
             view = discord.ui.View()
             view.add_item(dropdown)
@@ -78,28 +77,19 @@ class LFGController(commands.Cog):
             await interaction.followup.send(f"Ein Fehler ist aufgetreten: {e}", ephemeral=True)
 
     async def group_size_dropdown_callback(self, interaction: discord.Interaction):
-        # Hole die Gruppengröße und den Spielnamen korrekt aus dem Dropdown
-        group_size_label = interaction.data['values'][0]  # z.B. "5" oder "10"
-        # Hole den Label-Text aus der SelectOption, um den Spielnamen zu bekommen
-        # Die Options werden als "X Spieler" gelabelt, value ist die Zahl
-        # Wir holen den Spielnamen aus der Message, falls möglich
-        try:
-            # Versuche, den Spielnamen aus der letzten Auswahl zu holen
-            # Die Message enthält: "Wähle die Gruppengröße:" und die View hat die SelectOption
-            # Wir holen den Spielnamen aus der View, falls möglich
-            game_name = None
-            for item in interaction.message.components[0]['components']:
-                if item['custom_id'] == 'group_size_dropdown':
-                    # Die Beschreibung enthält den Spielnamen
-                    desc = item.get('options', [{}])[0].get('description', '')
-                    if 'Größe für ' in desc:
-                        game_name = desc.split('Größe für ')[-1]
-            if not game_name:
-                # Fallback: Hole Spielnamen aus der vorherigen Auswahl
-                game_name = getattr(interaction, 'game_name', 'Unbekanntes Spiel')
-        except Exception:
+        # Hole die Gruppengröße und den Spielnamen direkt aus der Auswahl
+        group_size = int(interaction.data['values'][0])
+        # Der Spielname wird im Dropdown-Objekt gespeichert
+        # Finde das passende Dropdown-Objekt in der View
+        game_name = None
+        for item in interaction.message.components[0]['components']:
+            if item['custom_id'] == 'group_size_dropdown':
+                # Hole das Label der ersten Option (z.B. '5 Spieler') und die Description
+                desc = item.get('options', [{}])[0].get('description', '')
+                if 'Größe für ' in desc:
+                    game_name = desc.split('Größe für ')[-1]
+        if not game_name:
             game_name = 'Unbekanntes Spiel'
-        group_size = int(group_size_label)
         modal = GroupDescriptionModal(interaction, group_size, game_name)
         await interaction.response.send_modal(modal)
 
@@ -154,9 +144,14 @@ class LFGController(commands.Cog):
             # Erstelle Voice-Kanal und Verschiebe den ersteller.
             await view.create_voice_channel(interaction)
 
-            await interaction.followup.send(f"Gruppe für {game_name} wurde in {temp_channel.mention} erstellt!", ephemeral=True)
+            # Nur hier eine Antwort senden, wenn die Methode direkt aus einem Command aufgerufen wird
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"Gruppe für {game_name} wurde in {temp_channel.mention} erstellt!", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"Ein Fehler ist aufgetreten: {e}", ephemeral=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"Ein Fehler ist aufgetreten: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"Ein Fehler ist aufgetreten: {e}", ephemeral=True)
 
 # Cog registrieren
 async def setup(bot):

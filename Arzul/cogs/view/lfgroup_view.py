@@ -38,6 +38,7 @@ class GroupSizeDropdown(Select):
     async def callback(self, interaction: Interaction):
         try:
             group_size = int(self.values[0].split()[0])  # Extrahiere die Zahl aus "X Spieler"
+            # game_name aus self.game_name, nicht aus der Message!
             modal = GroupDescriptionModal(interaction, group_size, self.game_name)
             await interaction.response.send_modal(modal)
         except ValueError as e:
@@ -249,6 +250,7 @@ class GroupDescriptionModal(Modal):
                 start_date,
                 start_time
             )
+            # Nach erfolgreichem Erstellen keine weitere Antwort senden!
         except Exception as e:
             if not interaction.response.is_done():
                 await interaction.response.send_message(f"Fehler beim Erstellen der Gruppe: {str(e)}", ephemeral=True)
