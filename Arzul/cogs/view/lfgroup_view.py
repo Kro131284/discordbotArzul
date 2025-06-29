@@ -240,7 +240,6 @@ class GroupDescriptionModal(Modal):
             if not controller:
                 await interaction.response.send_message("Fehler: LFG-System nicht verfügbar.", ephemeral=True)
                 return
-                
             # Gruppe erstellen, jetzt mit Datum und Zeit
             await controller.create_group(
                 interaction,

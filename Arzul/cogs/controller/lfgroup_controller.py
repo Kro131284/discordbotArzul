@@ -78,8 +78,28 @@ class LFGController(commands.Cog):
             await interaction.followup.send(f"Ein Fehler ist aufgetreten: {e}", ephemeral=True)
 
     async def group_size_dropdown_callback(self, interaction: discord.Interaction):
-        group_size = int(interaction.data['values'][0])
-        game_name = interaction.message.content.split()[-1]
+        # Hole die Gruppengröße und den Spielnamen korrekt aus dem Dropdown
+        group_size_label = interaction.data['values'][0]  # z.B. "5" oder "10"
+        # Hole den Label-Text aus der SelectOption, um den Spielnamen zu bekommen
+        # Die Options werden als "X Spieler" gelabelt, value ist die Zahl
+        # Wir holen den Spielnamen aus der Message, falls möglich
+        try:
+            # Versuche, den Spielnamen aus der letzten Auswahl zu holen
+            # Die Message enthält: "Wähle die Gruppengröße:" und die View hat die SelectOption
+            # Wir holen den Spielnamen aus der View, falls möglich
+            game_name = None
+            for item in interaction.message.components[0]['components']:
+                if item['custom_id'] == 'group_size_dropdown':
+                    # Die Beschreibung enthält den Spielnamen
+                    desc = item.get('options', [{}])[0].get('description', '')
+                    if 'Größe für ' in desc:
+                        game_name = desc.split('Größe für ')[-1]
+            if not game_name:
+                # Fallback: Hole Spielnamen aus der vorherigen Auswahl
+                game_name = getattr(interaction, 'game_name', 'Unbekanntes Spiel')
+        except Exception:
+            game_name = 'Unbekanntes Spiel'
+        group_size = int(group_size_label)
         modal = GroupDescriptionModal(interaction, group_size, game_name)
         await interaction.response.send_modal(modal)
 
