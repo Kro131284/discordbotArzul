@@ -186,6 +186,10 @@ class CreateVoiceChannelButton(Button):
 class JoinGroupView(View):
     def __init__(self, channel, bot, member, channel_title):
         super().__init__(timeout=None)
+        self.channel = channel
+        self.bot = bot
+        self.member = member
+        self.channel_title = channel_title
         self.add_item(JoinGroupButton(channel, bot))
         self.add_item(LeaveGroupButton(channel, bot))
         self.add_item(CloseGroupButton(channel, bot))
