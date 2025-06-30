@@ -40,11 +40,9 @@ class LFGController(commands.Cog):
         await self.show_group_size(interaction, game_name)
 
     async def show_group_size(self, interaction: discord.Interaction, game_name: str):
-        """Zeigt Dropdown für Gruppengrößen basierend auf dem Spiel."""
+        """Zeigt Dropdown für Gruppengrößen basierend auf dem Spiel oder öffnet direkt das Modal, wenn nur eine Größe vorhanden ist."""
         try:
             print(f"[DEBUG] show_group_size() aufgerufen mit game_name = {game_name}")
-
-            await interaction.response.defer(ephemeral=True)
 
             group_sizes = await Group.fetch_group_sizes(game_name)  # Hier wird die SQL-Abfrage gemacht!
 
@@ -55,9 +53,19 @@ class LFGController(commands.Cog):
                 )
                 return
 
+            # Gruppengrößen aufsteigend sortieren
+            group_sizes = sorted(group_sizes)
             print(f"[DEBUG] Gefundene Gruppengrößen für {game_name}: {group_sizes}")
 
-            # Dropdown für Gruppengrößen erstellen
+            if len(group_sizes) == 1:
+                # Nur eine Gruppengröße -> Modal direkt öffnen (ohne defer!)
+                group_size = group_sizes[0]
+                modal = GroupDescriptionModal(interaction, group_size, game_name)
+                await interaction.response.send_modal(modal)
+                return
+
+            # Mehrere Gruppengrößen: jetzt defer und Dropdown anzeigen
+            await interaction.response.defer(ephemeral=True)
             dropdown = GroupSizeDropdown(interaction, interaction.client, game_name)
             dropdown.options = [
                 discord.SelectOption(label=f"{size} Spieler", description=f"Größe für {game_name}", value=str(size))
@@ -141,17 +149,10 @@ class LFGController(commands.Cog):
             # Nachricht in Gruppendaten speichern
             self.bot.temp_channels[temp_channel.id]["message"] = message
 
-            # Erstelle Voice-Kanal und Verschiebe den ersteller.
-            await view.create_voice_channel(interaction)
-
-            # Nur hier eine Antwort senden, wenn die Methode direkt aus einem Command aufgerufen wird
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"Gruppe für {game_name} wurde in {temp_channel.mention} erstellt!", ephemeral=True)
+            # KEIN automatisches Erstellen/Verschieben in Voice-Channel mehr!
+            await interaction.followup.send(f"Gruppe für {game_name} wurde in {temp_channel.mention} erstellt!", ephemeral=True)
         except Exception as e:
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"Ein Fehler ist aufgetreten: {e}", ephemeral=True)
-            else:
-                await interaction.followup.send(f"Ein Fehler ist aufgetreten: {e}", ephemeral=True)
+            await interaction.followup.send(f"Ein Fehler ist aufgetreten: {e}", ephemeral=True)
 
 # Cog registrieren
 async def setup(bot):

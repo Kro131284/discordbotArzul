@@ -180,7 +180,10 @@ class CreateVoiceChannelButton(Button):
         voice_channel = await guild.create_voice_channel(
             name=self.channel_title, category=category
         )
-        await self.member.move_to(voice_channel)
+        # Nur verschieben, wenn der User in einem Voice-Channel ist
+        creator = group_data['creator']
+        if hasattr(creator, 'voice') and creator.voice and creator.voice.channel:
+            await creator.move_to(voice_channel)
         await interaction.followup.send(f"Sprachkanal {voice_channel.mention} wurde erstellt.", ephemeral=True)
 
 class JoinGroupView(View):
@@ -205,7 +208,11 @@ class JoinGroupView(View):
         voice_channel = await guild.create_voice_channel(
             name=group_data['channel_title'], category=category
         )
-        await group_data['creator'].move_to(voice_channel)
+        # Nur verschieben, wenn der User in einem Voice-Channel ist
+        creator = group_data['creator']
+        if hasattr(creator, 'voice') and creator.voice and creator.voice.channel:
+            await creator.move_to(voice_channel)
+        await interaction.followup.send(f"Sprachkanal {voice_channel.mention} wurde erstellt.", ephemeral=True)
 
 class GroupDescriptionModal(Modal):
     def __init__(self, interaction, group_size, game_name):
@@ -238,12 +245,15 @@ class GroupDescriptionModal(Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            # Bestätige die Modal-Interaktion sofort
+            await interaction.response.defer(ephemeral=True)
+            
             group_name = self.group_name.value
             start_date = self.start_date.value
             start_time = self.start_time.value
             controller = interaction.client.get_cog("LFGController")
             if not controller:
-                await interaction.response.send_message("Fehler: LFG-System nicht verfügbar.", ephemeral=True)
+                await interaction.followup.send("Fehler: LFG-System nicht verfügbar.", ephemeral=True)
                 return
             # Gruppe erstellen, jetzt mit Datum und Zeit
             await controller.create_group(
@@ -256,7 +266,5 @@ class GroupDescriptionModal(Modal):
             )
             # Nach erfolgreichem Erstellen keine weitere Antwort senden!
         except Exception as e:
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"Fehler beim Erstellen der Gruppe: {str(e)}", ephemeral=True)
-            else:
-                await interaction.followup.send(f"Fehler beim Erstellen der Gruppe: {str(e)}", ephemeral=True)
+            # Da wir bereits defer() aufgerufen haben, müssen wir immer followup.send verwenden
+            await interaction.followup.send(f"Fehler beim Erstellen der Gruppe: {str(e)}", ephemeral=True)
