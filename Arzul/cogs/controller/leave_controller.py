@@ -6,6 +6,7 @@ from cogs.model.leave_model import LeaveModel
 from cogs.view.leave_view import LeaveView
 from dotenv import load_dotenv
 import os
+import asyncio
 
 load_dotenv()
 CHANNEL_ID = int(os.getenv('Leave_ID').strip())            # Channel für normales Verlassen
@@ -54,12 +55,15 @@ class MemberEventsController(commands.Cog):
         """Wird ausgelöst, wenn ein Mitglied den Server verlässt."""
         print(f"[Event] on_member_remove für {member.name} ({member.id})")
         kicked = False
-
+        await asyncio.sleep(1)  # Verzögerung, damit das Audit Log aktualisiert ist
         try:
-            async for entry in member.guild.audit_logs(limit=1, action=discord.AuditLogAction.kick):
+            async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.kick):
                 if entry.target.id == member.id:
-                    kicked = True
-                    break
+                    time_diff = (discord.utils.utcnow() - entry.created_at).total_seconds()
+                    print(f"[Debug] Kick-Log gefunden: {entry.user} hat {entry.target} gekickt, Zeitdifferenz: {time_diff}s")
+                    if time_diff < 10:
+                        kicked = True
+                        break
         except Exception as e:
             print(f"[Fehler] AuditLog konnte nicht gelesen werden: {e}")
 
