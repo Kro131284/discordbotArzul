@@ -23,30 +23,23 @@ class GameDropdown(Select):
 
 class GroupSizeDropdown(Select):
     def __init__(self, original_interaction: Interaction, bot, game_name: str):
-        # Die ursprüngliche Interaktion ist hier nicht direkt notwendig,
-        # da der Callback dieses Dropdowns eine NEUE Interaktion ist.
-        # Wichtig ist, dass game_name korrekt gespeichert wird.
         self.bot = bot
         self.game_name = game_name
         super().__init__(
-            placeholder="Wähle die Gruppengröße aus", options=[], custom_id="group_size_dropdown"
+            placeholder="Wähle die Gruppengröße aus", 
+            options=[], 
+            custom_id="group_size_dropdown"
         )
 
     async def callback(self, interaction: Interaction):
         # Wichtig: Die Interaktion des Dropdown-Klicks muss beantwortet werden.
         # Wir senden ein Modal, was eine gültige Antwort ist.
         group_size = int(interaction.data['values'][0])
-        
-        # Holen des LFGController-Cogs
-        # WICHTIG: Hier muss der korrekte Klassenname des Cogs stehen!
         controller = interaction.client.get_cog("LFGController")
-
         if controller:
-            # Erstelle das Modal und sende es als Antwort auf die Dropdown-Interaktion
             modal = GroupDescriptionModal(interaction, group_size, self.game_name)
             await interaction.response.send_modal(modal)
         else:
-            # Falls der Controller nicht gefunden wird, sende eine Fehlermeldung
             print(f"[ERROR] LFGController nicht gefunden in GroupSizeDropdown callback.")
             await interaction.response.send_message(
                 "Ein interner Fehler ist aufgetreten (LFGController nicht gefunden). Bitte versuche es später erneut.", 
@@ -222,37 +215,29 @@ class CreateVoiceChannelButton(Button):
         if not group_data:
             await interaction.response.send_message("Fehler: Diese Gruppe existiert nicht mehr.", ephemeral=True)
             return
-        
         # Nur der Ersteller darf den Sprachkanal per Button erstellen
         if interaction.user.id != self.creator_member.id:
             await interaction.response.send_message("Nur der Ersteller der Gruppe kann den Sprachkanal erstellen.", ephemeral=True)
             return
-
         # Wenn bereits ein Sprachkanal existiert, informiere den Benutzer
         if "voice_channel" in group_data and group_data["voice_channel"]:
             await interaction.response.send_message(f"Der Sprachkanal existiert bereits: {group_data['voice_channel'].mention}", ephemeral=True)
             return
-            
         await interaction.response.defer(ephemeral=True) # Interaktion verzögern
         guild = self.channel.guild
         category = discord.utils.get(guild.categories, name=CATEGORY_NAME)
-        
-        # Falls die Kategorie nicht existiert, erstelle sie
         if not category:
             category = await guild.create_category(CATEGORY_NAME)
-
         voice_channel = await guild.create_voice_channel(
             name=self.channel_title, category=category
         )
         group_data["voice_channel"] = voice_channel # Speichern des VoiceChannel-Objekts
-
         # Versuche, den Ersteller in den neuen Sprachkanal zu verschieben, falls er sich in einem Sprachkanal befindet
         if self.creator_member.voice and self.creator_member.voice.channel:
             await self.creator_member.move_to(voice_channel)
             await interaction.followup.send(f"Sprachkanal {voice_channel.mention} wurde erstellt und du wurdest verschoben.", ephemeral=True)
         else:
             await interaction.followup.send(f"Sprachkanal {voice_channel.mention} wurde erstellt. Du bist in keinem Sprachkanal, um verschoben zu werden.", ephemeral=True)
-
 
 class JoinGroupView(View):
     def __init__(self, channel, bot, member, channel_title):
@@ -265,20 +250,15 @@ class JoinGroupView(View):
         self.add_item(CreateVoiceChannelButton(channel, bot, member, channel_title))
 
     async def create_voice_channel(self, interaction: Interaction):
-        # Dies wird von LFGController.create_group aufgerufen, um den Initial-VC zu erstellen
         group_data = self.bot.temp_channels.get(self.channel.id)
         if not group_data:
             # Dies sollte hier nicht passieren, da es direkt nach der Kanalkreation aufgerufen wird
             print(f"[ERROR] Gruppe nicht gefunden für Sprachkanalerstellung in JoinGroupView.")
             return
-        
         guild = self.channel.guild
         category = discord.utils.get(guild.categories, name=CATEGORY_NAME)
-        
         if not category:
             category = await guild.create_category(CATEGORY_NAME)
-
-        # Erstelle den Voice Channel nur, wenn er noch nicht existiert
         if "voice_channel" not in group_data or group_data["voice_channel"] is None:
             voice_channel = await guild.create_voice_channel(
                 name=group_data['channel_title'], category=category
@@ -286,8 +266,6 @@ class JoinGroupView(View):
             group_data["voice_channel"] = voice_channel # Speichern des VoiceChannel-Objekts
         else:
             voice_channel = group_data["voice_channel"] # Verwende den bereits vorhandenen
-
-        # Verschiebe den Ersteller in den Sprachkanal, wenn er in einem Sprachkanal ist
         creator = group_data['creator']
         if creator and creator.voice and creator.voice.channel != voice_channel:
             await creator.move_to(voice_channel)
@@ -303,28 +281,20 @@ class GroupDescriptionModal(Modal):
     )
 
     def __init__(self, interaction_for_modal: Interaction, group_size: int, game_name: str):
-        # Der Titel des Modals wird dynamisch gesetzt
         super().__init__(title=f"[{game_name}] Neue Gruppe")
-        self.interaction_for_modal = interaction_for_modal # Die Interaktion, die das Modal ausgelöst hat
+        self.interaction_for_modal = interaction_for_modal
         self.group_size = group_size
         self.game_name = game_name
-        
         self.add_item(self.group_name_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         group_name = self.group_name_input.value
-        
-        # Holen des LFGController-Cogs
-        # WICHTIG: Hier muss der korrekte Klassenname des Cogs stehen!
         controller = interaction.client.get_cog("LFGController")
-
         if controller:
-            # Rufe die create_group Methode im Controller auf
-            # Die Interaktion hier ist die SUBMIT-Interaktion des Modals.
             await controller.create_group(interaction, group_name, self.game_name, self.group_size)
         else:
             print(f"[ERROR] LFGController nicht gefunden in GroupDescriptionModal on_submit.")
-            await interaction.followup.send( # followup, da das Modal bereits eine Antwort gesendet hat
-                "Es ist ein Fehler aufgetreten. Die Gruppe konnte nicht erstellt werden (Controller nicht gefunden).", 
+            await interaction.followup.send(
+                "Es ist ein Fehler aufgetreten. Die Gruppe konnte nicht erstellt werden (Controller nicht gefunden).",
                 ephemeral=True
             )

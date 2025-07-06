@@ -5,6 +5,7 @@ from cogs.model.leave_model import LeaveModel
 from cogs.view.leave_view import LeaveView
 from dotenv import load_dotenv
 import os
+import asyncio
 
 load_dotenv()
 CHANNEL_ID = int(os.getenv('Leave_ID').strip())

@@ -44,32 +44,14 @@ class LFGController(commands.Cog):
         await self.show_group_size(interaction, game_name)
 
     async def show_group_size(self, interaction: discord.Interaction, game_name: str):
-        """Zeigt Dropdown für Gruppengrößen basierend auf dem Spiel."""
+        """Zeigt Dropdown für Gruppengrößen basierend auf dem Spiel oder öffnet direkt das Modal, wenn nur eine Größe vorhanden ist."""
         try:
             print(f"[DEBUG] show_group_size() aufgerufen mit game_name = {game_name}")
 
-            # Wichtig: Diese Interaktion wurde bereits im game_dropdown_callback ausgelöst.
-            # Wenn game_dropdown_callback nicht deferiert hat, muss hier deferiert werden.
-            # Da es im lfg-Befehl schon deferiert und dann ein followup sendet,
-            # ist die Interaktion aus dem ersten Dropdown 'beantwortet'.
-            # Der Klick auf das zweite Dropdown (GameDropdown) ist eine NEUE Interaktion,
-            # die eine neue Antwort erfordert.
-            # Hier ist es entscheidend, dass show_group_size auf die INTERAKTION aus dem GameDropdown reagiert.
-            
-            # Wichtig: Prüfen, ob die Interaktion bereits geantwortet wurde. 
-            # Das ist der Fall, wenn sie von einer vorherigen Dropdown-Auswahl kommt.
-            # Daher sollte der game_dropdown_callback die Interaktion an show_group_size weitergeben
-            # und NICHT selbst deferieren oder antworten.
-            # show_group_size sollte dann deferieren ODER direkt die Antwort senden.
-            # Da die GroupSizeDropdown später ein Modal sendet, muss hier nur das Followup gesendet werden.
-            
-            # Da game_dropdown_callback keine response sendet, muss hier die erste response erfolgen.
-            # Wir deferieren nicht sofort, sondern warten auf die Datenbankabfrage
-            # und senden dann direkt eine followup Nachricht.
-            # Wenn die DB-Abfrage länger dauert, KÖNNTE hier ein Timeout entstehen,
-            # aber da wir dann ein Modal schicken, ist die Interaktion ja noch offen.
 
             group_sizes = await Group.fetch_group_sizes(game_name)
+
+            group_sizes = await Group.fetch_group_sizes(game_name)  # Hier wird die SQL-Abfrage gemacht!
 
             if not group_sizes:
                 print(f"[DEBUG] Keine Gruppengrößen für {game_name} gefunden!")
@@ -80,12 +62,23 @@ class LFGController(commands.Cog):
                 )
                 return
 
+            # Gruppengrößen aufsteigend sortieren
+            group_sizes = sorted(group_sizes)
             print(f"[DEBUG] Gefundene Gruppengrößen für {game_name}: {group_sizes}")
 
             # Dropdown für Gruppengrößen erstellen
             # Wichtig: Die interaction_original muss die aktuelle interaction sein
             dropdown = GroupSizeDropdown(interaction, self.bot, game_name) # <- interaction und game_name übergeben
+            if len(group_sizes) == 1:
+                # Nur eine Gruppengröße -> Modal direkt öffnen (ohne defer!)
+                group_size = group_sizes[0]
+                modal = GroupDescriptionModal(interaction, group_size, game_name)
+                await interaction.response.send_modal(modal)
+                return
 
+            # Mehrere Gruppengrößen: jetzt defer und Dropdown anzeigen
+            await interaction.response.defer(ephemeral=True)
+            dropdown = GroupSizeDropdown(interaction, interaction.client, game_name)
             dropdown.options = [
                 discord.SelectOption(label=f"{size} Spieler", description=f"Größe für {game_name}", value=str(size))
                 for size in group_sizes
@@ -115,27 +108,30 @@ class LFGController(commands.Cog):
     # Der LFGController muss nur die create_group Methode bereitstellen.
     # Die Logik der Modal-Anzeige ist jetzt vollständig in der View.
     async def group_size_dropdown_callback(self, interaction: discord.Interaction):
-        # Diese Callback-Methode wird hier eigentlich NICHT mehr benötigt,
-        # da der GroupSizeDropdown-Callback in der View das Modal direkt sendet.
-        # Ich lasse sie als Kommentar hier, falls der Callback-Pfad geändert wird.
-        pass
-        # group_size = int(interaction.data['values'][0])
-        # game_name = interaction.message.content.split()[-1] # <- Diese Art der Extraktion ist unzuverlässig
-        # modal = GroupDescriptionModal(interaction, group_size, game_name)
-        # await interaction.response.send_modal(modal) # <- Diese Zeile wäre im GroupSizeDropdown.callback
+        # Hole die Gruppengröße und den Spielnamen direkt aus der Auswahl
+        group_size = int(interaction.data['values'][0])
+        # Der Spielname wird im Dropdown-Objekt gespeichert
+        # Finde das passende Dropdown-Objekt in der View
+        game_name = None
+        for item in interaction.message.components[0]['components']:
+            if item['custom_id'] == 'group_size_dropdown':
+                # Hole das Label der ersten Option (z.B. '5 Spieler') und die Description
+                desc = item.get('options', [{}])[0].get('description', '')
+                if 'Größe für ' in desc:
+                    game_name = desc.split('Größe für ')[-1]
+        if not game_name:
+            game_name = 'Unbekanntes Spiel'
+        modal = GroupDescriptionModal(interaction, group_size, game_name)
+        await interaction.response.send_modal(modal)
 
-    async def create_group(self, interaction: discord.Interaction, group_name : str, game_name : str, group_size: int):
+    async def create_group(self, interaction: discord.Interaction, group_name : str, game_name : str, group_size: int, start_date: str, start_time: str):
         """Erstellt eine Gruppe und sendet eine Nachricht mit Buttons."""
         try:
             guild = interaction.guild
             member = interaction.user # Creator ist der Interagierende
 
             # Temporären Textkanalnamen vorbereiten
-            # Besser: Eine Kombination aus GameName und GroupName für Eindeutigkeit
-            # Oder einfach nur group_name, wenn game_name im Embed-Titel steht
             channel_name_for_text_channel = f"{game_name.lower().replace(' ', '-')}-{group_name.lower().replace(' ', '-')}"
-            # Discord Channel-Namen sind limitiert, kürzere Namen sind besser
-            channel_name_for_text_channel = channel_name_for_text_channel[:90] # Max 100 Zeichen, plus etwas Puffer
 
             channel_title = f"[{game_name}] {group_name}" # Titel für Embed und Voice-Channel
 
@@ -150,13 +146,13 @@ class LFGController(commands.Cog):
             # Gruppendaten speichern
             self.bot.temp_channels[temp_channel.id] = {
                 "group_size": group_size,
-                "members": [], # Startet leer
-                "creator": member, # Speichert das Member-Objekt des Erstellers
+                "members": [],
+                "creator": member,
                 "last_active": datetime.utcnow(),
                 "game_name": game_name,
                 "group_name": group_name,
-                "channel_title" : channel_title, # channel_title gespeichert
-                "voice_channel": None # Voice-Channel wird erst später zugewiesen
+                "channel_title": channel_title,
+                "voice_channel": None
             }
 
             # Embed erstellen
@@ -165,35 +161,30 @@ class LFGController(commands.Cog):
                 color=discord.Color.green(),
                 description=f"Eine Gruppe für **{game_name}** wurde erstellt."
             )
-            embed.add_field(name="Teilnehmer", value=f"**1/{group_size}**\n{member.display_name}", inline=False) # Creator ist der erste Teilnehmer
+            embed.add_field(name="Teilnehmer", value=f"**1/{group_size}**\n{member.display_name}", inline=False)
             embed.set_footer(text="Drücke den Button, um beizutreten!")
             embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
 
             # Den Ersteller sofort zur Mitgliederliste hinzufügen
             self.bot.temp_channels[temp_channel.id]["members"].append(member)
 
-
             # View mit Buttons erstellen
             view = JoinGroupView(temp_channel, self.bot, member, channel_title=channel_title)
 
             # Nachricht mit Buttons senden
-            # interaction hier ist die des Modals. Sie muss jetzt deferiert oder gesendet werden.
-            # Da modal.on_submit das Modal gesendet hat, können wir hier ein followup senden.
             message = await temp_channel.send(embed=embed, view=view)
 
             # Nachricht in Gruppendaten speichern
             self.bot.temp_channels[temp_channel.id]["message"] = message
 
-            # Erstelle Voice-Kanal und Verschiebe den Ersteller
-            # Dies ist der erste Aufruf, um den VC zu erstellen und den Ersteller zu bewegen
-            await view.create_voice_channel(interaction) # interaction ist die des Modals
+            # Erstelle Voice-Kanal und verschiebe den Ersteller
+            await view.create_voice_channel(interaction)
 
             # Bestätigung an den Benutzer senden (ephemeral)
-            if interaction.response.is_done(): # Wenn das Modal bereits geantwortet hat
+            if interaction.response.is_done():
                 await interaction.followup.send(f"Gruppe für **{game_name}** wurde in {temp_channel.mention} erstellt!", ephemeral=True)
-            else: # Wenn das Modal noch nicht geantwortet hat (sollte nicht der Fall sein, aber als Fallback)
+            else:
                 await interaction.response.send_message(f"Gruppe für **{game_name}** wurde in {temp_channel.mention} erstellt!", ephemeral=True)
-
         except Exception as e:
             error_msg = f"Ein Fehler bei create_group(): {e}"
             logging.error(error_msg, exc_info=True) # exc_info für vollständigen Traceback

@@ -59,14 +59,14 @@ class WelcomeController(commands.Cog):
 
         try:
             greetings = await self.model.fetch_greetings()
-
             if greetings:
                 greeting = random.choice(greetings)[0]
             else:
                 greeting = "Willkommen auf dem Server, {name}!"
 
-            embed = self.view.create_welcome_embed(member, greeting)
-            await channel.send(embed=embed)
+            # Nachricht nach deinem Muster
+            welcome_message = f"Herzlich willkommen, {member.mention}!\n{greeting.format(name=member.name)}"
+            await channel.send(welcome_message)
 
         except Exception as e:
             print(f"Ein Fehler ist aufgetreten: {e}")

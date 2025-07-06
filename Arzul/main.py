@@ -61,4 +61,7 @@ async def on_shutdown():
     print("Bot wurde geschlossen.")
 
 if __name__ == "__main__":
-    asyncio.run(main())  # Das Token ist jetzt direkt im `main()` Aufruf
+    try:
+        asyncio.run(main())  # Das Token ist jetzt direkt im `main()` Aufruf
+    except KeyboardInterrupt:
+        print("Bot wurde per KeyboardInterrupt (Strg+C) beendet.")
