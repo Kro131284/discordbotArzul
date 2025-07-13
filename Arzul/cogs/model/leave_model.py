@@ -1,15 +1,16 @@
 import aiomysql
+from conn_db import db_pool  # Importiere den globalen Pool
 
 class LeaveModel:
     def __init__(self, pool):
-        self.pool = pool
+        self.pool = pool or db_pool  # Verwende den übergebenen Pool oder den globalen Pool
         if self.pool is None:
-            print("[LeaveModel] Warnung: Der Verbindungspool wurde mit None initialisiert.")
+            print("[LeaveModel] Warnung: Kein Datenbankpool verfügbar.")
 
     async def set_user_deleted(self, user_id):
         """Setzt den Status eines Benutzers in der Datenbank auf 'deleted' (1)."""
         if self.pool is None:
-            print("[LeaveModel] Fehler: Der Verbindungspool ist nicht initialisiert.")
+            print("[LeaveModel] Fehler: Kein Datenbankpool verfügbar.")
             return False
 
         try:
@@ -20,19 +21,14 @@ class LeaveModel:
                     result = await cur.fetchone()
 
                     if result and result[0] > 0:
-                        # Hier wird der Status auf 1 gesetzt
                         await cur.execute('UPDATE user_data SET status = %s WHERE user_id = %s', (1, user_id))
-                        await conn.commit() # Änderungen in der Datenbank speichern
+                        await conn.commit()
                         print(f"[LeaveModel] Benutzer {user_id}: Status auf gelöscht (1) gesetzt.")
                         return True
                     else:
-                        print(f"[LeaveModel] Benutzer {user_id} nicht in der DB gefunden. Überspringe DB-Update.")
+                        print(f"[LeaveModel] Benutzer {user_id} nicht in der DB gefunden.")
                         return False
-        except aiomysql.Error as e:
-            if conn:
-                await conn.rollback() # Rollback im Fehlerfall
-            print(f"[LeaveModel] Datenbankfehler beim Setzen des Status für Benutzer {user_id}: {e}")
-            return False
+
         except Exception as e:
-            print(f"[LeaveModel] Unerwarteter Fehler in set_user_deleted für Benutzer {user_id}: {e}")
+            print(f"[LeaveModel] Fehler beim Setzen des Status für {user_id}: {e}")
             return False
