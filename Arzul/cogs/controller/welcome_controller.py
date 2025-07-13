@@ -51,12 +51,14 @@ class WelcomeController(commands.Cog):
     @commands.Cog.listener()
     async def on_member_join(self, member):
         print(f"Mitglied beigetreten: {member.name}")
+        # WICHTIG: Prüfe, ob self.model initialisiert ist
+        if self.model is None:
+            print("Fehler: self.model ist nicht initialisiert!")
+            return
         channel = self.bot.get_channel(Willk_ID)
-
         if not channel:
             print(f"Kanal mit ID {Willk_ID} nicht gefunden.")
             return
-
         try:
             greetings = await self.model.fetch_greetings()
             if greetings:

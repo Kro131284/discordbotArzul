@@ -63,23 +63,16 @@ class MemberEventsController(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
-        """Wird ausgelöst, wenn ein Mitglied den Server verlässt."""
+        """Wird ausgelöst, wenn ein Mitglied den Server verlässt (freiwillig oder durch Kick)."""
         print(f"[EVENT] on_member_remove für {member.name}")
-        
-        # Kleine Verzögerung für das Audit Log
-        await asyncio.sleep(1)
-        
         kicked = False
-        if member.guild:
-            try:
-                async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.kick):
-                    if entry.target.id == member.id:
-                        time_diff = (discord.utils.utcnow() - entry.created_at).total_seconds()
-                        if time_diff < 5:  # Nur Kicks der letzten 5 Sekunden
-                            kicked = True
-                            break
-            except Exception as e:
-                print(f"[ERROR] Fehler beim Lesen der Audit Logs: {e}")
+        try:
+            async for entry in member.guild.audit_logs(limit=1, action=discord.AuditLogAction.kick):
+                if entry.target.id == member.id:
+                    kicked = True
+                    break
+        except Exception as e:
+            print(f"[ERROR] Fehler beim Lesen der Audit Logs: {e}")
 
         await self.handle_member_leave(member, kicked=kicked)
 
