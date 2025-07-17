@@ -6,10 +6,14 @@ from cogs.view.leave_view import LeaveView
 from dotenv import load_dotenv
 import os
 import asyncio
+from datetime import datetime, timedelta
 
 load_dotenv()
 CHANNEL_ID = int(os.getenv('Leave_ID'))
-ACTION_CHANNEL_ID = int(os.getenv('Loch_ID'))
+
+intents = discord.Intents.default()
+intents.members = True  # WICHTIG für on_member_remove
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 class MemberEventsController(commands.Cog):
     def __init__(self, bot):
@@ -33,23 +37,28 @@ class MemberEventsController(commands.Cog):
     async def handle_member_leave(self, member, kicked=False, banned=False):
         """Verarbeitet das Verlassen eines Mitglieds."""
         print(f"[DEBUG] handle_member_leave für {member.name} ({member.id}). Kicked: {kicked}, Banned: {banned}")
-        
+
+        # Bots ignorieren
+        if member.bot:
+            print(f"[INFO] Bot {member.name} wurde ignoriert.")
+            return
+
         try:
-            # Channel-ID basierend auf dem Event-Typ wählen
-            channel_id = ACTION_CHANNEL_ID if (kicked or banned) else CHANNEL_ID
-            
-            # Nachricht basierend auf dem Event-Typ erstellen
+            # Channel-ID festlegen
+            channel_id = CHANNEL_ID
+
+            # Nachricht bestimmen
             if kicked:
                 message = f'{member.name} wurde aus dem Loch gekickt.'
             elif banned:
                 message = f'{member.name} wurde aus dem Loch verbannt.'
             else:
                 message = f'{member.name} hat das Loch verlassen.'
-                # Bei freiwilligem Leave eine DM senden
+                # DM nur bei freiwilligem Leave
                 try:
                     await self.view.send_dm(member, f'Schade, dass du unser Loch verlässt, {member.name}. Viel Erfolg auf deiner weiteren Reise . . . Du Ratte!')
-                except:
-                    print(f"[INFO] Konnte keine DM an {member.name} senden.")
+                except Exception as e:
+                    print(f"[INFO] Konnte keine DM an {member.name} senden: {e}")
 
             # Nachricht im Channel senden
             await self.view.send_leave_notification(member, channel_id, message)
@@ -57,7 +66,7 @@ class MemberEventsController(commands.Cog):
             # Datenbank-Status aktualisieren
             if self.model:
                 await self.model.set_user_deleted(member.id)
-            
+
         except Exception as e:
             print(f"[ERROR] Fehler in handle_member_leave: {e}")
 
@@ -66,10 +75,15 @@ class MemberEventsController(commands.Cog):
         """Wird ausgelöst, wenn ein Mitglied den Server verlässt (freiwillig oder durch Kick)."""
         print(f"[EVENT] on_member_remove für {member.name}")
         kicked = False
+
+        await asyncio.sleep(1)  # Verzögerung für AuditLog-Verfügbarkeit
+        now = datetime.utcnow()
+
         try:
-            async for entry in member.guild.audit_logs(limit=1, action=discord.AuditLogAction.kick):
-                if entry.target.id == member.id:
+            async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.kick):
+                if entry.target.id == member.id and (now - entry.created_at).total_seconds() < 5:
                     kicked = True
+                    print(f"[DEBUG] Kick erkannt durch {entry.user.name} ({entry.user.id})")
                     break
         except Exception as e:
             print(f"[ERROR] Fehler beim Lesen der Audit Logs: {e}")
