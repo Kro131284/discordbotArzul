@@ -234,4 +234,3 @@ class EventManager:
             print(f"Unerwarteter FEHLER beim Laden der Events: {e}")
             traceback.print_exc()
             self.events = {} # Sicherer Fallback
-

@@ -219,7 +219,7 @@ class EventPlanner(commands.Cog):
 
 
     # --- Slash Command ---
-    @app_commands.command(name="Raidplanung", description="Plane einen Raid")
+    @app_commands.command(name="planen", description="Plane einen Raid")
     @app_commands.checks.has_permissions(manage_events=True)
     async def planen(self, interaction: discord.Interaction):
         modal = self.EventModal(self, interaction)
